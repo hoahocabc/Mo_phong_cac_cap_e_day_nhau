@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mô phỏng 3D Quả cầu & Lực đẩy</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- p5.js và các addon -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.dom.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+</head>
+<body>
+  <div id="sidebar">
+    <div class="sidebar-title">Điều khiển</div>
+    <div class="sidebar-buttons">
+      <!-- Các nút thêm vật thể -->
+      <button id="addSphereBtn">Thêm oval</button>
+      <button id="addSingleBondBtn">Liên kết đơn</button>
+      <button id="addDoubleBondBtn">Liên kết đôi</button>
+      <button id="addTripleBondBtn">Liên kết ba</button>
+      
+      <div style="height: 10px;"></div> <!-- Khoảng cách -->
+
+      <!-- Các nút chức năng -->
+      <button id="toggleChargeBtn" class="btn-charge">Bật/Tắt điện tích</button>
+      <button id="toggleAngleBtn" class="btn-angle">Giá trị góc</button>
+      <button id="resetBtn" class="btn-reset">Reset</button>
+    </div>
+    
+    <div id="sidebar-list-label">Danh sách đối tượng:</div>
+    <div id="objectList"></div>
+  </div>
+  <div id="canvas-container"></div>
+  <script src="sketch.js"></script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+body {
+  margin: 0;
+  padding: 0;
+  background: #19191a;
+  font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+  color: #dadce0;
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+#sidebar {
+  width: 180px;
+  min-width: 120px;
+  background: #23242a;
+  height: 100vh;
+  box-shadow: 2px 0 10px #0007;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 14px 8px 6px 8px;
+  gap: 10px;
+  z-index: 20;
+  border-right: 1.3px solid #41414c;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #338ecc #23242a;
+}
+#sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+#sidebar::-webkit-scrollbar-thumb {
+  background: #338ecc;
+  border-radius: 3px;
+}
+#sidebar::-webkit-scrollbar-track {
+  background: #23242a;
+}
+#sidebar .sidebar-title {
+  font-weight: 700;
+  font-size: 1.03em;
+  color: #3cafff;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  margin-top: 0;
+}
+#sidebar .sidebar-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+/* Style chung cho tất cả button trong sidebar trừ nút xóa X */
+#sidebar button:not(.object-x) {
+  width: 100%;
+  /* Mặc định màu xanh dương cho nút thêm */
+  background: linear-gradient(90deg,#2399ff 0%,#67e0fa 130%);
+  color: #fff;
+  border: none;
+  padding: 7.5px 0;
+  font-size: 0.98em;
+  border-radius: 6px;
+  margin: 0;
+  transition: box-shadow 0.13s, transform 0.11s, filter 0.2s;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  outline: none;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.2);
+  min-height: 0;
+}
+#sidebar button:not(.object-x):hover {
+  transform: translateY(-1.5px) scale(1.02);
+  filter: brightness(1.1);
+  box-shadow: 0 3px 12px rgba(0,0,0,0.3);
+}
+#sidebar button:not(.object-x):active {
+  transform: translateY(0);
+}
+
+/* --- Style riêng cho từng nút chức năng --- */
+
+/* Nút Bật/Tắt điện tích: Màu xanh lá */
+#sidebar button.btn-charge {
+  background: linear-gradient(90deg, #27ae60, #2ecc71);
+  color: #fff;
+}
+
+/* Nút Giá trị góc: Màu vàng */
+#sidebar button.btn-angle {
+  background: linear-gradient(90deg, #f39c12, #f1c40f);
+  color: #2c2c2c;
+}
+
+/* Nút Reset: Màu đỏ tối */
+#sidebar button.btn-reset {
+  background: linear-gradient(90deg, #c0392b, #e74c3c);
+  color: #fff;
+  margin-top: 5px; /* Tách ra một chút */
+}
+
+/* Danh sách đối tượng */
+#sidebar-list-label {
+  color: #85c6f0;
+  font-weight: 500;
+  margin-bottom: 2px;
+  margin-top: 6px;
+  font-size: 0.96em;
+}
+#objectList {
+  margin-bottom: 2px;
+  min-height: 20px;
+  padding-right: 2px;
+}
+.object-list-item {
+  display: flex;
+  align-items: center;
+  background: #24272e;
+  border-radius: 5px;
+  margin-bottom: 1.7px;
+  padding: 2.5px 4px 2.5px 4px;
+  font-size: 0.96em;
+  color: #eaf6ff;
+  border: 1.1px solid #28467424;
+  user-select: none;
+}
+.object-list-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.98em;
+}
+/* Nút x riêng biệt */
+.object-x {
+  background: none;
+  border: none;
+  color: #ef324c;
+  font-size: 13px;
+  font-weight: bold;
+  padding: 0;
+  margin: 0 0 0 6px;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  display: inline;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  box-shadow: none;
+  border-radius: 0;
+  height: auto;
+  vertical-align: middle;
+  transition: color 0.13s;
+}
+.object-x:hover,
+.object-x:focus {
+  color: #bc2121;
+  background: none;
+}
+#canvas-container {
+  flex: 1 1 auto;
+  height: 100vh;
+  position: relative;
+  outline: none;
+}
+canvas {
+  display: block;
+  margin: 0;
+  background: transparent;
+}

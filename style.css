@@ -95,6 +95,12 @@ body {
   color: #2c2c2c;
 }
 
+/* Nút Oval liên kết: Màu tím nhạt */
+#sidebar button.btn-bond-oval {
+  background: linear-gradient(90deg, #9b59b6, #a569bd);
+  color: #fff;
+}
+
 /* Nút Reset: Màu đỏ tối */
 #sidebar button.btn-reset {
   background: linear-gradient(90deg, #c0392b, #e74c3c);

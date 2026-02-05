@@ -7,19 +7,27 @@ let scale3D = 1.1;
 let curRot; 
 
 let center;
-const CORD_LENGTH = 70; 
-const BOND_RADIUS = 90;
+const CORD_LENGTH = 80; 
+
+// --- CẤU HÌNH BÁN KÍNH ---
+const RADIUS_BLUE = 80;   // Bán kính hiển thị của Oval
+const RADIUS_WHITE = 115; // Bán kính hiển thị của Cầu trắng (xa hơn)
+const PHYSICS_RADIUS = 80; // Bán kính dùng để tính toán vật lý
+
 let arialFont;
 
 const OVAL_A = 36;
 const OVAL_B = 27;
 const OVAL_C = 27;
 const RED_RADIUS = 36; 
+const WHITE_SPHERE_RADIUS = 27; 
 
 let pointerOnSidebar = false;
 let sphereIdCounter = 1;
 
 let showAngle = false;
+let showBondOvals = false; 
+
 let angleRepresentatives = []; 
 
 // Biến hỗ trợ kéo thả chính xác
@@ -27,7 +35,7 @@ let dragOffset = null;
 let dragPlaneNormal = null; 
 let dragPlanePoint = null;  
 
-let chargeEnabled = true;
+let realRepulsionEnabled = false;
 
 function preload() {
   arialFont = loadFont('Arial.ttf');
@@ -57,13 +65,25 @@ function setup() {
   document.getElementById('addDoubleBondBtn').onclick = function () { addBondSphere("double"); }
   document.getElementById('addTripleBondBtn').onclick = function () { addBondSphere("triple"); }
 
-  document.getElementById('toggleChargeBtn').onclick = function() {
-    chargeEnabled = !chargeEnabled;
+  // --- Xử lý sự kiện và đổi nhãn nút ---
+  const btnRepulsion = document.getElementById('toggleRealRepulsionBtn');
+  btnRepulsion.onclick = function() {
+    realRepulsionEnabled = !realRepulsionEnabled;
+    spheres.forEach(s => s.velocity.mult(0));
+    this.innerText = realRepulsionEnabled ? "Tắt lực đẩy thật" : "Bật lực đẩy thật";
   };
 
-  document.getElementById('toggleAngleBtn').onclick = function() {
+  const btnAngle = document.getElementById('toggleAngleBtn');
+  btnAngle.onclick = function() {
     if (!showAngle) computeAllRepresentativeAngles();
     showAngle = !showAngle;
+    this.innerText = showAngle ? "Ẩn giá trị góc" : "Hiện giá trị góc";
+  };
+  
+  const btnBondOval = document.getElementById('toggleBondOvalBtn');
+  btnBondOval.onclick = function() {
+    showBondOvals = !showBondOvals;
+    this.innerText = showBondOvals ? "Tắt oval liên kết" : "Bật oval liên kết";
   };
 
   document.getElementById('resetBtn').onclick = resetSystem;
@@ -91,27 +111,32 @@ function resetSystem() {
   sphereIdCounter = 1;
   draggingIndex = -1;
   scale3D = 1.1;
-  chargeEnabled = true;
+  realRepulsionEnabled = false;
   showAngle = false;
+  showBondOvals = false; 
   angleRepresentatives = [];
   
   curRot = createIdentityMatrix();
   rotateMatrixX(curRot, 0.5);
   rotateMatrixY(curRot, -0.5);
   
+  document.getElementById('toggleRealRepulsionBtn').innerText = "Bật lực đẩy thật";
+  document.getElementById('toggleAngleBtn').innerText = "Hiện giá trị góc";
+  document.getElementById('toggleBondOvalBtn').innerText = "Bật oval liên kết";
+  
   renderObjectList();
 }
 
 function addSphere() {
   let phi = random(0, PI), theta = random(0, TWO_PI);
-  let r = CORD_LENGTH;
+  let r = RADIUS_BLUE; 
   let pos = sphericalToCartesian(r, theta, phi);
   spheres.push({
     pos: pos.copy(),
     velocity: createVector(0, 0, 0),
     negative: true,
     dragging: false,
-    type: 'blue',
+    type: 'blue', // LP
     id: sphereIdCounter++,
   });
   renderObjectList();
@@ -120,14 +145,14 @@ function addSphere() {
 
 function addBondSphere(bondType) {
   let phi = random(0, PI), theta = random(0, TWO_PI);
-  let r = BOND_RADIUS;
+  let r = RADIUS_WHITE; 
   let pos = sphericalToCartesian(r, theta, phi);
   spheres.push({
     pos: pos.copy(),
     velocity: createVector(0, 0, 0),
     negative: true,
     dragging: false,
-    type: "white",
+    type: "white", // BP
     bondType: bondType,
     id: sphereIdCounter++,
   });
@@ -138,7 +163,6 @@ function addBondSphere(bondType) {
 function draw() {
   background(0); 
   
-  // Điều chỉnh ánh sáng môi trường xuống một chút để tăng độ tương phản
   ambientLight(150, 150, 150); 
   directionalLight(180, 180, 180, 0.5, 0.5, -1);
   directionalLight(80, 80, 100, -0.5, -0.5, 0.5); 
@@ -150,21 +174,11 @@ function draw() {
 
   drawCentralPoint();
 
-  if (chargeEnabled) {
-    balancePhysics(); 
-    balancePhysics(); 
-  }
-
-  for (let i = 0; i < spheres.length; i++) drawSphere(i);
+  balancePhysics(); 
+  balancePhysics(); 
+  
   for (let i = 0; i < spheres.length; i++) drawBond(i);
-
-  if (chargeEnabled) {
-    for (let i = 0; i < spheres.length; i++) {
-      if (spheres[i].negative && spheres[i].type === "blue") {
-        drawMinusLabel3D(spheres[i].pos);
-      }
-    }
-  }
+  for (let i = 0; i < spheres.length; i++) drawSphere(i);
 
   if (showAngle) {
     angleRepresentatives.forEach(rep => {
@@ -176,13 +190,13 @@ function draw() {
   pop();
 }
 
-// --- VẬT LÝ RÀNG BUỘC CỨNG (Hard Constraint) ---
+// --- VẬT LÝ ---
 function balancePhysics() {
   let negIdx = spheres.map((s, i) => s.negative ? i : -1).filter(i => i !== -1);
   if (negIdx.length < 2) return;
   
-  const kCoulomb = 25000;  
-  const damping = 0.92; 
+  const BASE_K = realRepulsionEnabled ? 45000 : 25000;
+  let currentDamping = (draggingIndex >= 0) ? 0.88 : (realRepulsionEnabled ? 0.91 : 0.94); 
   
   for (let aIdx = 0; aIdx < negIdx.length; aIdx++) {
     let ai = negIdx[aIdx];
@@ -195,23 +209,49 @@ function balancePhysics() {
 
     let force = createVector(0, 0, 0);
 
+    let dirA = sA.pos.copy().normalize(); 
+    let virtualPosA = dirA.copy().mult(PHYSICS_RADIUS);
+
     for (let bIdx = 0; bIdx < negIdx.length; bIdx++) {
       if (aIdx === bIdx) continue;
       let bi = negIdx[bIdx];
-      let delta = p5.Vector.sub(sA.pos, spheres[bi].pos);
+      let sB = spheres[bi];
+
+      let dirB = sB.pos.copy().normalize();
+      let virtualPosB = dirB.copy().mult(PHYSICS_RADIUS);
+
+      let delta = p5.Vector.sub(virtualPosA, virtualPosB);
       let distSq = delta.magSq();
-      distSq = max(distSq, 50); 
       
-      let pushForce = delta.normalize().mult(kCoulomb / distSq);
+      let minD = (draggingIndex >= 0) ? 100 : (realRepulsionEnabled ? 25 : 40);
+      distSq = max(distSq, minD); 
+      
+      let kFactor = 1.0;
+      if (realRepulsionEnabled) {
+        let typeA = sA.type; 
+        let typeB = sB.type; 
+        if (typeA === 'blue' && typeB === 'blue') kFactor = 2.5; 
+        else if ((typeA === 'blue' && typeB === 'white') || (typeA === 'white' && typeB === 'blue')) kFactor = 1.7; 
+        else kFactor = 1.0; 
+      } else {
+        kFactor = 1.0; 
+      }
+
+      let interactionFactor = (draggingIndex >= 0) ? 0.5 : 1.0;
+      let magnitude = (BASE_K * kFactor * interactionFactor) / distSq;
+      magnitude = min(magnitude, 600); 
+
+      let pushDir = delta.normalize();
+      let pushForce = pushDir.mult(magnitude);
       force.add(pushForce);
     }
     
     sA.velocity.add(force);       
-    sA.velocity.mult(damping);    
-    sA.velocity.limit(100);  
+    sA.velocity.mult(currentDamping);    
+    sA.velocity.limit(realRepulsionEnabled ? 80 : 60);  
     sA.pos.add(sA.velocity);
     
-    let targetRad = (sA.type === "white") ? BOND_RADIUS : CORD_LENGTH;
+    let targetRad = (sA.type === 'white') ? RADIUS_WHITE : RADIUS_BLUE;
     sA.pos.setMag(targetRad);
 
     let normal = sA.pos.copy().normalize();
@@ -221,22 +261,6 @@ function balancePhysics() {
 }
 
 // --- TƯƠNG TÁC CHUỘT ---
-
-function projectOnTrackball(touchX, touchY) {
-  let mouseOnBall = createVector(touchX, touchY, 0);
-  let r = min(width, height) * 0.8; 
-  mouseOnBall.x /= r;
-  mouseOnBall.y /= r;
-  
-  let d = mouseOnBall.magSq();
-  if (d <= 1.0) {
-    mouseOnBall.z = Math.sqrt(1.0 - d);
-  } else {
-    mouseOnBall.normalize();
-  }
-  return mouseOnBall;
-}
-
 function getMouseRay() {
   let fov = PI / 3.0; 
   let distToCam = (height/2.0) / tan(fov/2.0); 
@@ -308,7 +332,6 @@ function mousePressed() {
     } else {
       dragOffset = createVector(0,0,0);
     }
-    dragObjDist = spheres[bestIdx].pos.mag();
 
   } else {
     draggingIndex = -1;
@@ -323,27 +346,32 @@ function mouseDragged() {
     let intersect = intersectRayPlane(ray.origin, ray.dir, dragPlanePoint, dragPlaneNormal);
     
     if (intersect) {
-      let newPos = p5.Vector.add(intersect, dragOffset);
-      let targetDist = (spheres[draggingIndex].type === "white") ? BOND_RADIUS : CORD_LENGTH;
-      newPos.setMag(targetDist); 
+      let dest = p5.Vector.add(intersect, dragOffset);
+      
+      let targetR = (spheres[draggingIndex].type === 'white') ? RADIUS_WHITE : RADIUS_BLUE;
+      dest.setMag(targetR); 
 
-      spheres[draggingIndex].pos = newPos;
+      // Dùng lerp để di chuyển mượt mà
+      spheres[draggingIndex].pos.lerp(dest, 0.2); 
       spheres[draggingIndex].velocity.mult(0); 
       
       if (showAngle) computeAllRepresentativeAngles();
     }
   } else {
-    let v1 = projectOnTrackball(prevMouseX - width/2, prevMouseY - height/2);
-    let v2 = projectOnTrackball(mouseX - width/2, mouseY - height/2);
+    let dx = mouseX - prevMouseX;
+    let dy = mouseY - prevMouseY;
     
-    let axis = p5.Vector.cross(v1, v2);
-    let angle = Math.acos(constrain(p5.Vector.dot(v1, v2), -1, 1));
-    angle *= 2.5; 
-
-    if (axis.mag() > 1e-4 && angle > 1e-4) {
+    if (dx !== 0 || dy !== 0) {
+      let sensitivity = 0.009; 
+      let dist = Math.sqrt(dx*dx + dy*dy);
+      
+      let axis = createVector(dy, dx, 0);
       axis.normalize();
-      let rotMat = createAxisAngleMatrix(axis, angle);
-      curRot = multiplyMatrices(rotMat, curRot);
+      
+      let angle = -dist * sensitivity;
+
+      let rotDelta = createAxisAngleMatrix(axis, angle);
+      curRot = multiplyMatrices(rotDelta, curRot);
     }
   }
 
@@ -406,16 +434,6 @@ function rotateMatrixY(mat, angle) {
   for(let i=0; i<16; i++) mat[i] = res[i];
 }
 
-function rotateVectorAroundAxis(v, axis, angle) {
-  let k = axis.copy().normalize();
-  let cosA = Math.cos(angle);
-  let sinA = Math.sin(angle);
-  let term1 = p5.Vector.mult(v, cosA);
-  let term2 = p5.Vector.cross(k, v).mult(sinA);
-  let term3 = p5.Vector.mult(k, p5.Vector.dot(k, v) * (1 - cosA));
-  return p5.Vector.add(p5.Vector.add(term1, term2), term3);
-}
-
 function findHitSphere(mx, my, tmat) {
   let bestIdx = -1;
   let minD = 1e9;
@@ -455,7 +473,10 @@ function computeAllRepresentativeAngles() {
         spheres[i].type === filter[0] && spheres[j].type === filter[1] &&
         !used.has(`${i},${j}`) && !used.has(`${j},${i}`)
       ) {
-        let d = p5.Vector.dist(spheres[i].pos, spheres[j].pos);
+        let dirI = spheres[i].pos.copy().normalize();
+        let dirJ = spheres[j].pos.copy().normalize();
+        let d = p5.Vector.dist(dirI, dirJ);
+        
         if (d < minD) { minD = d; minI = i; minJ = j; }
       }
     }
@@ -477,6 +498,27 @@ function drawCentralPoint() {
   pop();
 }
 
+// Hàm vẽ electron có hiệu ứng 3D (cầu bóng)
+function drawElectron3D(x, y, z) {
+  push();
+  translate(x, y, z);
+  noStroke();
+  
+  // --- CHANGED: Màu Cam đậm (255, 100, 0) & Hiệu ứng 3D ---
+  // Tắt emissive để không bị phẳng, chỉ dùng ambient và specular
+  let c = color(255, 100, 0); 
+  ambientMaterial(c); 
+  specularMaterial(255, 255, 255); // Bóng trắng tạo điểm sáng highlight
+  shininess(100); // Độ bóng cao (như viên bi)
+  
+  // Không dùng emissiveMaterial() hoặc dùng rất thấp
+  // emissiveMaterial(0); 
+  
+  fill(c); 
+  sphere(5, 24, 24); // Tăng chi tiết lưới để cầu tròn trịa hơn
+  pop();
+}
+
 function drawSphere(idx) {
   let s = spheres[idx];
   let p = s.pos;
@@ -485,47 +527,35 @@ function drawSphere(idx) {
   noStroke();
 
   if (s.type === 'blue') {
-    ambientMaterial(30, 160, 255);
-    specularMaterial(40); 
-    shininess(30);
+    let expandFactor = realRepulsionEnabled ? 1.2 : 1.0; 
     let toCenter = p5.Vector.mult(p, -1).normalize();
     alignVectorToAxis(toCenter, createVector(1, 0, 0));
-    ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64);
+
+    push();
+    let distFromAxis = 8; 
+    drawElectron3D(0, distFromAxis, 0);
+    drawElectron3D(0, -distFromAxis, 0);
+    pop();
+    
+    let ctx = drawingContext;
+    ctx.depthMask(false); 
+    
+    ambientMaterial(30, 160, 255);
+    fill(30, 160, 255, 50); 
+    
+    ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64);
+    
+    ctx.depthMask(true); 
+
   } else if (s.type === 'white') {
-    // SỬA: Giảm độ sáng Ambient để tạo khối 3D rõ hơn
     ambientMaterial(200, 200, 200);
-    // Tăng độ phản chiếu ánh sáng (Specular)
     specularMaterial(150); 
     shininess(60); 
-    sphere(27, 64, 64);
+    sphere(WHITE_SPHERE_RADIUS, 64, 64);
   } else {
     ambientMaterial(200);
     sphere(27, 64, 64);
   }
-  pop();
-}
-
-function drawMinusLabel3D(pos) {
-  push();
-  translate(pos.x, pos.y, pos.z);
-  
-  let invRot = [
-    curRot[0], curRot[4], curRot[8], 0,
-    curRot[1], curRot[5], curRot[9], 0,
-    curRot[2], curRot[6], curRot[10], 0,
-    0, 0, 0, 1
-  ];
-  
-  applyMatrix(...invRot);
-  translate(0, 0, OVAL_A + 4); 
-  
-  fill(0);
-  noStroke();
-  textFont(arialFont);
-  textSize(45);
-  textAlign(CENTER, CENTER);
-  text("-", 0, 0);
-  
   pop();
 }
 
@@ -548,14 +578,71 @@ function drawBond(idx) {
   let color = "#fff"; 
   let A = center;
   let B = s.pos;
-  if (s.bondType === "single") {
-    drawBondBetweenPoints(A, B, color, 1, 4);
-  } else if (s.bondType === "double") {
-    drawBondBetweenPoints(A, B, color, 2, 4);
-  } else if (s.bondType === "triple") {
-    drawBondBetweenPoints(A, B, color, 3, 4);
+
+  if (showBondOvals) {
+    push();
+    
+    let distCenterToWhite = RADIUS_WHITE; 
+    let startR = RED_RADIUS; 
+    let endR = distCenterToWhite - WHITE_SPHERE_RADIUS; 
+    let length = endR - startR; 
+    let midR = startR + length / 2; 
+    
+    let dir = B.copy().normalize();
+    let ovalPos = dir.copy().mult(midR);
+    
+    translate(ovalPos.x, ovalPos.y, ovalPos.z);
+    
+    let toCenter = dir.copy().mult(-1);
+    alignVectorToAxis(toCenter, createVector(1, 0, 0));
+    
+    let distY = 8;
+    let distZ = 8;
+    
+    if (s.bondType === "single") {
+      drawElectron3D(0, distY, 0);
+      drawElectron3D(0, -distY, 0);
+    } 
+    else if (s.bondType === "double") {
+      drawElectron3D(0, distY, 0);
+      drawElectron3D(0, -distY, 0);
+      drawElectron3D(0, 0, distZ);
+      drawElectron3D(0, 0, -distZ);
+    } 
+    else if (s.bondType === "triple") {
+      for(let k=0; k<3; k++) {
+        let ang = TWO_PI/3 * k;
+        let ey = cos(ang) * distY * 1.6;
+        let ez = sin(ang) * distZ * 1.6;
+        drawElectron3D(6, ey, ez);  
+        drawElectron3D(-6, ey, ez); 
+      }
+    }
+
+    let ctx = drawingContext;
+    ctx.depthMask(false); 
+    
+    noStroke();
+    ambientMaterial(30, 160, 255); 
+    fill(30, 160, 255, 45); 
+    
+    ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64);
+    
+    ctx.depthMask(true);
+    
+    pop();
+    
+  } else {
+    if (s.bondType === "single") {
+      drawBondBetweenPoints(A, B, color, 1, 4);
+    } else if (s.bondType === "double") {
+      drawBondBetweenPoints(A, B, color, 2, 4);
+    } else if (s.bondType === "triple") {
+      drawBondBetweenPoints(A, B, color, 3, 4);
+    }
   }
 }
+
 function drawBondBetweenPoints(A, B, color, num, radius = 4) {
   let d = p5.Vector.sub(B, A).mag();
   let bondVec = p5.Vector.sub(B, A).normalize();
@@ -613,7 +700,8 @@ function drawAngleArc(idxA, idxB) {
 
   push();
   noFill();
-  stroke(255, 225, 24);
+  
+  stroke(0, 255, 255); 
   strokeWeight(5); 
   beginShape();
   for(const pt of pts) vertex(pt.x, pt.y, pt.z);
@@ -624,10 +712,11 @@ function drawAngleArc(idxA, idxB) {
   point(pts[steps].x, pts[steps].y, pts[steps].z);
 
   let midVec = p5.Vector.slerp(a1, a2, 0.5);
-  let midPt = midVec.copy().mult(rArc * 1.08); 
+  let midPt = midVec.copy().mult(rArc * 1.25); 
 
-  fill(255, 225, 24);
+  fill(255, 225, 24); 
   noStroke();
+  
   textFont(arialFont);
   textSize(32);
   textAlign(CENTER, CENTER);
@@ -644,6 +733,8 @@ function drawAngleArc(idxA, idxB) {
     0, 0, 0, 1
   ];
   applyMatrix(...invRot);
+  
+  translate(0, 0, 20); 
   
   text(str, 0, 0);
   pop();

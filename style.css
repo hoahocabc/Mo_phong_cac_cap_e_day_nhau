@@ -101,6 +101,13 @@ body {
   color: #fff;
 }
 
+/* Nút Lưu ảnh: Màu xanh lá cây */
+#sidebar button.btn-save-image {
+  background: linear-gradient(90deg, #16a085, #1abc9c);
+  color: #fff;
+  margin-top: 5px;
+}
+
 /* Nút Reset: Màu đỏ tối */
 #sidebar button.btn-reset {
   background: linear-gradient(90deg, #c0392b, #e74c3c);

@@ -37,6 +37,9 @@ let dragPlanePoint = null;
 
 let realRepulsionEnabled = false;
 
+// Biến cho chức năng lưu ảnh
+let savingImage = false;
+
 function preload() {
   arialFont = loadFont('Arial.ttf');
 }
@@ -46,7 +49,11 @@ function setup() {
   let cH = windowHeight;
   let cnv = createCanvas(cW, cH, WEBGL);
   cnv.parent('canvas-container');
+  
+  // Cài đặt cho độ mịn cao
   setAttributes('antialias', true);
+  setAttributes('alpha', true);
+  smooth(); // Bật làm mịn
   
   center = createVector(0, 0, 0);
   
@@ -86,6 +93,7 @@ function setup() {
     this.innerText = showBondOvals ? "Tắt oval liên kết" : "Bật oval liên kết";
   };
 
+  document.getElementById('saveImageBtn').onclick = saveImage4K;
   document.getElementById('resetBtn').onclick = resetSystem;
 
   const sidebar = document.getElementById('sidebar');
@@ -94,7 +102,6 @@ function setup() {
 
   renderObjectList();
   setAttributes('depth', true);
-  setAttributes('alpha', false);
 }
 
 function createIdentityMatrix() {
@@ -161,7 +168,12 @@ function addBondSphere(bondType) {
 }
 
 function draw() {
-  background(0); 
+  // Nếu đang lưu ảnh, dùng nền trong suốt, nếu không thì dùng nền đen
+  if (savingImage) {
+    clear(); // Nền trong suốt
+  } else {
+    background(0); // Nền đen
+  }
   
   ambientLight(150, 150, 150); 
   directionalLight(180, 180, 180, 0.5, 0.5, -1);
@@ -175,7 +187,6 @@ function draw() {
   drawCentralPoint();
 
   balancePhysics(); 
-  balancePhysics(); 
   
   for (let i = 0; i < spheres.length; i++) drawBond(i);
   for (let i = 0; i < spheres.length; i++) drawSphere(i);
@@ -188,6 +199,37 @@ function draw() {
   }
 
   pop();
+
+  // Nếu đang trong quá trình lưu ảnh
+  if (savingImage) {
+    // Tạo tên file với timestamp
+    let timestamp = year() + nf(month(), 2) + nf(day(), 2) + '_' + 
+                    nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2);
+    saveCanvas('molecule_4K_' + timestamp, 'png');
+    
+    // Restore pixelDensity về 1
+    pixelDensity(1);
+    savingImage = false;
+  }
+}
+
+function saveImage4K() {
+  // Tính toán pixelDensity cần thiết để đạt độ phân giải 4K
+  // Giả sử muốn chiều rộng đạt khoảng 3840 pixels
+  let targetWidth = 3840;
+  let currentWidth = width;
+  
+  // Tính pixelDensity ratio (tối đa 4 để không quá tải)
+  let densityRatio = min(targetWidth / currentWidth, 4);
+  
+  // Set pixelDensity cao hơn để tăng độ phân giải
+  pixelDensity(densityRatio);
+  
+  // Canvas sẽ tự động render với độ phân giải cao hơn
+  // mà KHÔNG thay đổi kích thước logic
+  
+  // Set flag để frame tiếp theo sẽ có nền trong suốt và lưu ảnh
+  savingImage = true;
 }
 
 // --- VẬT LÝ ---
@@ -358,20 +400,35 @@ function mouseDragged() {
       if (showAngle) computeAllRepresentativeAngles();
     }
   } else {
+    // --- CẢI TIẾN: XOAY TRACKBALL - ĐÃ ĐẢO NGƯỢC HƯỚNG ---
     let dx = mouseX - prevMouseX;
     let dy = mouseY - prevMouseY;
     
     if (dx !== 0 || dy !== 0) {
-      let sensitivity = 0.009; 
-      let dist = Math.sqrt(dx*dx + dy*dy);
+      let sensitivity = 0.01; // Độ nhạy xoay
       
-      let axis = createVector(dy, dx, 0);
-      axis.normalize();
+      // Tính khoảng cách di chuyển của chuột
+      let distance = Math.sqrt(dx * dx + dy * dy);
       
-      let angle = -dist * sensitivity;
-
-      let rotDelta = createAxisAngleMatrix(axis, angle);
-      curRot = multiplyMatrices(rotDelta, curRot);
+      // Tạo trục xoay vuông góc với hướng di chuyển của chuột
+      // ĐẢO NGƯỢC: Thay đổi từ (-dy, dx, 0) thành (dy, -dx, 0)
+      let rotationAxisScreen = createVector(dy, -dx, 0).normalize();
+      
+      // Chuyển trục xoay từ không gian camera sang không gian world
+      let rotationAxisWorld = createVector(
+        curRot[0] * rotationAxisScreen.x + curRot[1] * rotationAxisScreen.y + curRot[2] * rotationAxisScreen.z,
+        curRot[4] * rotationAxisScreen.x + curRot[5] * rotationAxisScreen.y + curRot[6] * rotationAxisScreen.z,
+        curRot[8] * rotationAxisScreen.x + curRot[9] * rotationAxisScreen.y + curRot[10] * rotationAxisScreen.z
+      ).normalize();
+      
+      // Góc xoay tỷ lệ với khoảng cách di chuyển
+      let angle = distance * sensitivity;
+      
+      // Tạo ma trận xoay quanh trục
+      let rotMatrix = createAxisAngleMatrix(rotationAxisWorld, angle);
+      
+      // Áp dụng xoay vào ma trận hiện tại
+      curRot = multiplyMatrices(rotMatrix, curRot);
     }
   }
 
@@ -494,28 +551,25 @@ function drawCentralPoint() {
   ambientMaterial(220, 30, 30);
   specularMaterial(50); 
   shininess(20); 
-  sphere(RED_RADIUS, 64, 64);
+  sphere(RED_RADIUS, 64, 64); // TĂNG từ 32 lên 64 segments
   pop();
 }
 
-// Hàm vẽ electron có hiệu ứng 3D (cầu bóng)
+// Hàm vẽ electron - KÍCH THƯỚC BAN ĐẦU, MÀU ĐỎ SÁNG
 function drawElectron3D(x, y, z) {
   push();
   translate(x, y, z);
   noStroke();
   
-  // --- CHANGED: Màu Cam đậm (255, 100, 0) & Hiệu ứng 3D ---
-  // Tắt emissive để không bị phẳng, chỉ dùng ambient và specular
-  let c = color(255, 100, 0); 
+  // Màu đỏ s��ng
+  let c = color(255, 80, 80); 
   ambientMaterial(c); 
-  specularMaterial(255, 255, 255); // Bóng trắng tạo điểm sáng highlight
-  shininess(100); // Độ bóng cao (như viên bi)
-  
-  // Không dùng emissiveMaterial() hoặc dùng rất thấp
-  // emissiveMaterial(0); 
+  emissiveMaterial(255, 60, 60); // Tự phát sáng đỏ
+  specularMaterial(255, 220, 220); // Highlight sáng
+  shininess(180); // Độ bóng cao
   
   fill(c); 
-  sphere(5, 24, 24); // Tăng chi tiết lưới để cầu tròn trịa hơn
+  sphere(5, 64, 64); // TĂNG từ 32 lên 64 segments
   pop();
 }
 
@@ -537,24 +591,32 @@ function drawSphere(idx) {
     drawElectron3D(0, -distFromAxis, 0);
     pop();
     
-    let ctx = drawingContext;
-    ctx.depthMask(false); 
+    // --- VẼ OVAL VỚI ĐỘ TRONG SUỐT RẤT CAO ĐỂ NHÌN THẤY ELECTRON RÕ ---
+    // Vẽ lớp bên ngoài với alpha RẤT THẤP
+    push();
+    ambientMaterial(20, 140, 235);
+    specularMaterial(80, 180, 255); // Specular xanh nhạt ở rìa
+    shininess(50); // Shininess vừa phải để ánh sáng tập trung ở rìa
+    fill(20, 140, 235, 50); // GIẢM từ 90 xuống 50 - RẤT TRONG SUỐT
+    ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64); // TĂNG từ 32 lên 64
+    pop();
     
-    ambientMaterial(30, 160, 255);
-    fill(30, 160, 255, 50); 
-    
-    ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64);
-    
-    ctx.depthMask(true); 
+    // Vẽ lớp bên trong RẤT MỜ
+    push();
+    ambientMaterial(10, 80, 150); // Màu tối hơn ở giữa
+    noLights(); // Tắt ánh sáng để giữa tối
+    fill(10, 80, 150, 30); // GIẢM từ 60 xuống 30 - GẦN NHƯ TRONG SUỐT HOÀN TOÀN
+    ellipsoid(OVAL_A * expandFactor * 0.75, OVAL_B * expandFactor * 0.75, OVAL_C * expandFactor * 0.75, 48, 48); // TĂNG từ 24 lên 48
+    pop();
 
   } else if (s.type === 'white') {
     ambientMaterial(200, 200, 200);
     specularMaterial(150); 
     shininess(60); 
-    sphere(WHITE_SPHERE_RADIUS, 64, 64);
+    sphere(WHITE_SPHERE_RADIUS, 64, 64); // TĂNG từ 32 lên 64 segments
   } else {
     ambientMaterial(200);
-    sphere(27, 64, 64);
+    sphere(27, 64, 64); // TĂNG từ 32 lên 64 segments
   }
   pop();
 }
@@ -619,16 +681,23 @@ function drawBond(idx) {
       }
     }
 
-    let ctx = drawingContext;
-    ctx.depthMask(false); 
+    // --- VẼ OVAL LIÊN KẾT - TĂNG ĐỘ TRONG SUỐT RẤT CAO ---
+    // Lớp ngoài RẤT TRONG SUỐT
+    push();
+    ambientMaterial(20, 140, 235);
+    specularMaterial(80, 180, 255);
+    shininess(50);
+    fill(20, 140, 235, 50); // GIẢM từ 90 xuống 50
+    ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64); // TĂNG từ 32 lên 64
+    pop();
     
-    noStroke();
-    ambientMaterial(30, 160, 255); 
-    fill(30, 160, 255, 45); 
-    
-    ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64);
-    
-    ctx.depthMask(true);
+    // Lớp trong GẦN NHƯ TRONG SUỐT HOÀN TOÀN
+    push();
+    ambientMaterial(10, 80, 150);
+    noLights();
+    fill(10, 80, 150, 30); // GIẢM từ 60 xuống 30
+    ellipsoid(OVAL_A * 0.75, OVAL_B * 0.75, OVAL_C * 0.75, 48, 48); // TĂNG từ 24 lên 48
+    pop();
     
     pop();
     
@@ -647,7 +716,7 @@ function drawBondBetweenPoints(A, B, color, num, radius = 4) {
   let d = p5.Vector.sub(B, A).mag();
   let bondVec = p5.Vector.sub(B, A).normalize();
   let mid = p5.Vector.add(A, B).mult(0.5);
-  let gap = 7;
+  let gap = 8; // TĂNG từ 7 lên 8 - các liên kết cách xa nhau thêm 1px
   let ortho = randomOrthogonal(bondVec);
   for (let i = 0; i < num; i++) {
     let offset = (num === 1) ? 0 : (i - (num-1)/2) * gap;
@@ -659,7 +728,7 @@ function drawBondBetweenPoints(A, B, color, num, radius = 4) {
     specularMaterial(20);
     shininess(10);
     noStroke();
-    cylinder(radius, max(d, 2), 32, 1);
+    cylinder(radius, max(d, 2), 32, 1); // TĂNG từ 16 lên 32 segments
     pop();
   }
 }

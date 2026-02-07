@@ -27,6 +27,7 @@ let sphereIdCounter = 1;
 
 let showAngle = false;
 let showBondOvals = false; 
+let ovalTransparent = true; // Biến mới: true = trong suốt (mặc định), false = đặc
 
 let angleRepresentatives = []; 
 
@@ -93,6 +94,13 @@ function setup() {
     this.innerText = showBondOvals ? "Tắt oval liên kết" : "Bật oval liên kết";
   };
 
+  // Nút bật/tắt trong suốt oval
+  const btnOvalTransparency = document.getElementById('toggleOvalTransparencyBtn');
+  btnOvalTransparency.onclick = function() {
+    ovalTransparent = !ovalTransparent;
+    this.innerText = ovalTransparent ? "Tắt trong suốt oval" : "Bật trong suốt oval";
+  };
+
   document.getElementById('saveImageBtn').onclick = saveImage4K;
   document.getElementById('resetBtn').onclick = resetSystem;
 
@@ -121,6 +129,7 @@ function resetSystem() {
   realRepulsionEnabled = false;
   showAngle = false;
   showBondOvals = false; 
+  ovalTransparent = true; // Reset về mặc định trong suốt
   angleRepresentatives = [];
   
   curRot = createIdentityMatrix();
@@ -130,6 +139,7 @@ function resetSystem() {
   document.getElementById('toggleRealRepulsionBtn').innerText = "Bật lực đẩy thật";
   document.getElementById('toggleAngleBtn').innerText = "Hiện giá trị góc";
   document.getElementById('toggleBondOvalBtn').innerText = "Bật oval liên kết";
+  document.getElementById('toggleOvalTransparencyBtn').innerText = "Tắt trong suốt oval";
   
   renderObjectList();
 }
@@ -561,7 +571,7 @@ function drawElectron3D(x, y, z) {
   translate(x, y, z);
   noStroke();
   
-  // Màu đỏ s��ng
+  // Màu đỏ sáng
   let c = color(255, 80, 80); 
   ambientMaterial(c); 
   emissiveMaterial(255, 60, 60); // Tự phát sáng đỏ
@@ -585,29 +595,40 @@ function drawSphere(idx) {
     let toCenter = p5.Vector.mult(p, -1).normalize();
     alignVectorToAxis(toCenter, createVector(1, 0, 0));
 
+    // Vẽ electron trước (nếu trong suốt thì sẽ thấy, nếu đặc thì bị che)
     push();
     let distFromAxis = 8; 
     drawElectron3D(0, distFromAxis, 0);
     drawElectron3D(0, -distFromAxis, 0);
     pop();
     
-    // --- VẼ OVAL VỚI ĐỘ TRONG SUỐT RẤT CAO ĐỂ NHÌN THẤY ELECTRON RÕ ---
-    // Vẽ lớp bên ngoài với alpha RẤT THẤP
-    push();
-    ambientMaterial(20, 140, 235);
-    specularMaterial(80, 180, 255); // Specular xanh nhạt ở rìa
-    shininess(50); // Shininess vừa phải để ánh sáng tập trung ở rìa
-    fill(20, 140, 235, 50); // GIẢM từ 90 xuống 50 - RẤT TRONG SUỐT
-    ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64); // TĂNG từ 32 lên 64
-    pop();
-    
-    // Vẽ lớp bên trong RẤT MỜ
-    push();
-    ambientMaterial(10, 80, 150); // Màu tối hơn ở giữa
-    noLights(); // Tắt ánh sáng để giữa tối
-    fill(10, 80, 150, 30); // GIẢM từ 60 xuống 30 - GẦN NHƯ TRONG SUỐT HOÀN TOÀN
-    ellipsoid(OVAL_A * expandFactor * 0.75, OVAL_B * expandFactor * 0.75, OVAL_C * expandFactor * 0.75, 48, 48); // TĂNG từ 24 lên 48
-    pop();
+    // --- VẼ OVAL - KIỂM TRA TRẠNG THÁI TRONG SUỐT ---
+    if (ovalTransparent) {
+      // Chế độ trong suốt cao - nhìn thấy electron bên trong
+      push();
+      ambientMaterial(20, 140, 235);
+      specularMaterial(80, 180, 255);
+      shininess(50);
+      fill(20, 140, 235, 50); // Rất trong suốt
+      ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64);
+      pop();
+      
+      push();
+      ambientMaterial(10, 80, 150);
+      noLights();
+      fill(10, 80, 150, 30); // Gần như trong suốt hoàn toàn
+      ellipsoid(OVAL_A * expandFactor * 0.75, OVAL_B * expandFactor * 0.75, OVAL_C * expandFactor * 0.75, 48, 48);
+      pop();
+    } else {
+      // Chế độ ĐẶC - che khuất hoàn toàn electron bên trong
+      push();
+      ambientMaterial(20, 140, 235);
+      specularMaterial(120, 200, 255);
+      shininess(80);
+      fill(20, 140, 235, 255); // Hoàn toàn đặc (alpha = 255)
+      ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64);
+      pop();
+    }
 
   } else if (s.type === 'white') {
     ambientMaterial(200, 200, 200);
@@ -661,6 +682,7 @@ function drawBond(idx) {
     let distY = 8;
     let distZ = 8;
     
+    // Vẽ electron trước
     if (s.bondType === "single") {
       drawElectron3D(0, distY, 0);
       drawElectron3D(0, -distY, 0);
@@ -681,23 +703,33 @@ function drawBond(idx) {
       }
     }
 
-    // --- VẼ OVAL LIÊN KẾT - TĂNG ĐỘ TRONG SUỐT RẤT CAO ---
-    // Lớp ngoài RẤT TRONG SUỐT
-    push();
-    ambientMaterial(20, 140, 235);
-    specularMaterial(80, 180, 255);
-    shininess(50);
-    fill(20, 140, 235, 50); // GIẢM từ 90 xuống 50
-    ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64); // TĂNG từ 32 lên 64
-    pop();
-    
-    // Lớp trong GẦN NHƯ TRONG SUỐT HOÀN TOÀN
-    push();
-    ambientMaterial(10, 80, 150);
-    noLights();
-    fill(10, 80, 150, 30); // GIẢM từ 60 xuống 30
-    ellipsoid(OVAL_A * 0.75, OVAL_B * 0.75, OVAL_C * 0.75, 48, 48); // TĂNG từ 24 lên 48
-    pop();
+    // --- VẼ OVAL LIÊN KẾT - KIỂM TRA TRẠNG THÁI TRONG SUỐT ---
+    if (ovalTransparent) {
+      // Chế độ trong suốt cao - nhìn thấy electron
+      push();
+      ambientMaterial(20, 140, 235);
+      specularMaterial(80, 180, 255);
+      shininess(50);
+      fill(20, 140, 235, 50);
+      ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64);
+      pop();
+      
+      push();
+      ambientMaterial(10, 80, 150);
+      noLights();
+      fill(10, 80, 150, 30);
+      ellipsoid(OVAL_A * 0.75, OVAL_B * 0.75, OVAL_C * 0.75, 48, 48);
+      pop();
+    } else {
+      // Chế độ ĐẶC - che khuất electron
+      push();
+      ambientMaterial(20, 140, 235);
+      specularMaterial(120, 200, 255);
+      shininess(80);
+      fill(20, 140, 235, 255); // Hoàn toàn đặc
+      ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64);
+      pop();
+    }
     
     pop();
     

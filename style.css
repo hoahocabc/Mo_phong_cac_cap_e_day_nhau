@@ -101,6 +101,12 @@ body {
   color: #fff;
 }
 
+/* Nút Bật/Tắt trong suốt oval: Màu cam */
+#sidebar button.btn-oval-transparency {
+  background: linear-gradient(90deg, #e67e22, #f39c12);
+  color: #fff;
+}
+
 /* Nút Lưu ảnh: Màu xanh lá cây */
 #sidebar button.btn-save-image {
   background: linear-gradient(90deg, #16a085, #1abc9c);

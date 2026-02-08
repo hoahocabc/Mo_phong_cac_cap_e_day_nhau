@@ -107,6 +107,12 @@ body {
   color: #fff;
 }
 
+/* Nút Nhãn: Màu xám nhạt */
+#sidebar button.btn-label {
+  background: linear-gradient(90deg, #95a5a6, #bdc3c7);
+  color: #1e1e1e;
+}
+
 /* Nút Lưu ảnh: Màu xanh lá cây */
 #sidebar button.btn-save-image {
   background: linear-gradient(90deg, #16a085, #1abc9c);

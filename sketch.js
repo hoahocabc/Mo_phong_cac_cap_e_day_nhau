@@ -1,3 +1,5 @@
+// sketch.js — Geometry tuned: Oval sizes, Touch points & Expansion logic
+
 let spheres = [];
 let draggingIndex = -1;
 let prevMouseX, prevMouseY;
@@ -9,37 +11,40 @@ let curRot;
 let center;
 const CORD_LENGTH = 80; 
 
-// --- CẤU HÌNH BÁN KÍNH ---
-const RADIUS_BLUE = 80;   // Bán kính hiển thị của Oval
-const RADIUS_WHITE = 115; // Bán kính hiển thị của Cầu trắng (xa hơn)
-const PHYSICS_RADIUS = 80; // Bán kính dùng để tính toán vật lý
+// --- CẤU HÌNH BÁN KÍNH VÀ KÍCH THƯỚC ---
+const RADIUS_WHITE = 115; // Khoảng cách từ tâm đến tâm cầu trắng
+const RED_RADIUS = 36;    // Bán kính cầu đỏ (trung tâm)
+const WHITE_SPHERE_RADIUS = 27; // Bán kính cầu trắng
+
+// Tính toán kích thước Oval liên kết để vừa khít
+// Gap = 115 - 36 - 27 = 52. => 2*A = 52 => A = 26.
+const OVAL_A_STD = 26; 
+const OVAL_B_STD = 21; // Tỉ lệ thẩm mỹ (khoảng 0.8 của A)
+const OVAL_C_STD = 21;
+
+// Vị trí tâm của Oval để đầu nhọn chạm mặt cầu đỏ: 36 + 26 = 62
+const DIST_VISUAL_STD = RED_RADIUS + OVAL_A_STD; 
+
+const PHYSICS_RADIUS = 80; // Bán kính dùng để tính toán vật lý (ẩn)
 
 let arialFont;
-
-const OVAL_A = 36;
-const OVAL_B = 27;
-const OVAL_C = 27;
-const RED_RADIUS = 36; 
-const WHITE_SPHERE_RADIUS = 27; 
-
 let pointerOnSidebar = false;
 let sphereIdCounter = 1;
 
 let showAngle = false;
 let showBondOvals = false; 
-let ovalTransparent = true; // Biến mới: true = trong suốt (mặc định), false = đặc
+let ovalTransparent = true; 
 
 let angleRepresentatives = []; 
 
-// Biến hỗ trợ kéo thả chính xác
+// Biến hỗ trợ kéo thả
 let dragOffset = null;      
 let dragPlaneNormal = null; 
 let dragPlanePoint = null;  
 
 let realRepulsionEnabled = false;
-
-// Biến cho chức năng lưu ảnh
 let savingImage = false;
+let showLabels = false;
 
 function preload() {
   arialFont = loadFont('Arial.ttf');
@@ -51,14 +56,13 @@ function setup() {
   let cnv = createCanvas(cW, cH, WEBGL);
   cnv.parent('canvas-container');
   
-  // Cài đặt cho độ mịn cao
   setAttributes('antialias', true);
   setAttributes('alpha', true);
-  smooth(); // Bật làm mịn
+  setAttributes('depth', true);
+  smooth();
   
   center = createVector(0, 0, 0);
   
-  // Khởi tạo ma trận xoay
   curRot = createIdentityMatrix();
   rotateMatrixX(curRot, 0.5);
   rotateMatrixY(curRot, -0.5);
@@ -73,7 +77,6 @@ function setup() {
   document.getElementById('addDoubleBondBtn').onclick = function () { addBondSphere("double"); }
   document.getElementById('addTripleBondBtn').onclick = function () { addBondSphere("triple"); }
 
-  // --- Xử lý sự kiện và đổi nhãn nút ---
   const btnRepulsion = document.getElementById('toggleRealRepulsionBtn');
   btnRepulsion.onclick = function() {
     realRepulsionEnabled = !realRepulsionEnabled;
@@ -94,11 +97,16 @@ function setup() {
     this.innerText = showBondOvals ? "Tắt oval liên kết" : "Bật oval liên kết";
   };
 
-  // Nút bật/tắt trong suốt oval
   const btnOvalTransparency = document.getElementById('toggleOvalTransparencyBtn');
   btnOvalTransparency.onclick = function() {
     ovalTransparent = !ovalTransparent;
     this.innerText = ovalTransparent ? "Tắt trong suốt oval" : "Bật trong suốt oval";
+  };
+
+  const btnLabels = document.getElementById('toggleLabelsBtn');
+  btnLabels.onclick = function() {
+    showLabels = !showLabels;
+    this.innerText = showLabels ? "Tắt nhãn" : "Bật nhãn";
   };
 
   document.getElementById('saveImageBtn').onclick = saveImage4K;
@@ -109,7 +117,6 @@ function setup() {
   sidebar.addEventListener('mouseleave', () => pointerOnSidebar = false);
 
   renderObjectList();
-  setAttributes('depth', true);
 }
 
 function createIdentityMatrix() {
@@ -129,8 +136,9 @@ function resetSystem() {
   realRepulsionEnabled = false;
   showAngle = false;
   showBondOvals = false; 
-  ovalTransparent = true; // Reset về mặc định trong suốt
+  ovalTransparent = true;
   angleRepresentatives = [];
+  showLabels = false;
   
   curRot = createIdentityMatrix();
   rotateMatrixX(curRot, 0.5);
@@ -140,13 +148,15 @@ function resetSystem() {
   document.getElementById('toggleAngleBtn').innerText = "Hiện giá trị góc";
   document.getElementById('toggleBondOvalBtn').innerText = "Bật oval liên kết";
   document.getElementById('toggleOvalTransparencyBtn').innerText = "Tắt trong suốt oval";
+  document.getElementById('toggleLabelsBtn').innerText = "Bật nhãn";
   
   renderObjectList();
 }
 
 function addSphere() {
   let phi = random(0, PI), theta = random(0, TWO_PI);
-  let r = RADIUS_BLUE; 
+  // Dùng RADIUS_WHITE làm bán kính sinh ra để tránh va chạm ngay lập tức
+  let r = 90; 
   let pos = sphericalToCartesian(r, theta, phi);
   spheres.push({
     pos: pos.copy(),
@@ -178,11 +188,10 @@ function addBondSphere(bondType) {
 }
 
 function draw() {
-  // Nếu đang lưu ảnh, dùng nền trong suốt, nếu không thì dùng nền đen
   if (savingImage) {
-    clear(); // Nền trong suốt
+    clear(); 
   } else {
-    background(0); // Nền đen
+    background(0); 
   }
   
   ambientLight(150, 150, 150); 
@@ -195,13 +204,24 @@ function draw() {
   applyMatrix(...curRot);
 
   drawCentralPoint();
+  if (showLabels) {
+    draw3DLabel(center, 'A', RED_RADIUS);
+  }
 
   balancePhysics(); 
   
   for (let i = 0; i < spheres.length; i++) drawBond(i);
-  for (let i = 0; i < spheres.length; i++) drawSphere(i);
+  
+  for (let i = 0; i < spheres.length; i++) {
+    drawSphere(i);
+    if (showLabels && spheres[i].type === 'white') {
+      draw3DLabel(spheres[i].pos, 'X', WHITE_SPHERE_RADIUS);
+    }
+  }
 
+  // Luôn cập nhật danh sách góc khi đang hiển thị để phản hồi theo thời gian thực
   if (showAngle) {
+    computeAllRepresentativeAngles();
     angleRepresentatives.forEach(rep => {
       const [a, b] = rep.indices;
       if (spheres[a] && spheres[b]) drawAngleArc(a, b);
@@ -210,35 +230,47 @@ function draw() {
 
   pop();
 
-  // Nếu đang trong quá trình lưu ảnh
   if (savingImage) {
-    // Tạo tên file với timestamp
     let timestamp = year() + nf(month(), 2) + nf(day(), 2) + '_' + 
                     nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2);
     saveCanvas('molecule_4K_' + timestamp, 'png');
-    
-    // Restore pixelDensity về 1
     pixelDensity(1);
     savingImage = false;
   }
 }
 
+function draw3DLabel(pos, str, objRadius) {
+  push();
+  translate(pos.x, pos.y, pos.z);
+
+  let invRot = [
+    curRot[0], curRot[4], curRot[8], 0,
+    curRot[1], curRot[5], curRot[9], 0,
+    curRot[2], curRot[6], curRot[10], 0,
+    0, 0, 0, 1
+  ];
+  applyMatrix(...invRot);
+
+  translate(0, 0, objRadius + 25); 
+
+  fill(0);          
+  stroke(255);      
+  strokeWeight(2);  
+  
+  emissiveMaterial(0); 
+  
+  textSize(28);
+  textAlign(CENTER, CENTER);
+  text(str, 0, 0);
+
+  pop();
+}
+
 function saveImage4K() {
-  // Tính toán pixelDensity cần thiết để đạt độ phân giải 4K
-  // Giả sử muốn chiều rộng đạt khoảng 3840 pixels
   let targetWidth = 3840;
   let currentWidth = width;
-  
-  // Tính pixelDensity ratio (tối đa 4 để không quá tải)
   let densityRatio = min(targetWidth / currentWidth, 4);
-  
-  // Set pixelDensity cao hơn để tăng độ phân giải
   pixelDensity(densityRatio);
-  
-  // Canvas sẽ tự động render với độ phân giải cao hơn
-  // mà KHÔNG thay đổi kích thước logic
-  
-  // Set flag để frame tiếp theo sẽ có nền trong suốt và lưu ảnh
   savingImage = true;
 }
 
@@ -303,7 +335,8 @@ function balancePhysics() {
     sA.velocity.limit(realRepulsionEnabled ? 80 : 60);  
     sA.pos.add(sA.velocity);
     
-    let targetRad = (sA.type === 'white') ? RADIUS_WHITE : RADIUS_BLUE;
+    // Ràng buộc khoảng cách vật lý (ẩn)
+    let targetRad = (sA.type === 'white') ? RADIUS_WHITE : PHYSICS_RADIUS;
     sA.pos.setMag(targetRad);
 
     let normal = sA.pos.copy().normalize();
@@ -400,7 +433,7 @@ function mouseDragged() {
     if (intersect) {
       let dest = p5.Vector.add(intersect, dragOffset);
       
-      let targetR = (spheres[draggingIndex].type === 'white') ? RADIUS_WHITE : RADIUS_BLUE;
+      let targetR = (spheres[draggingIndex].type === 'white') ? RADIUS_WHITE : PHYSICS_RADIUS;
       dest.setMag(targetR); 
 
       // Dùng lerp để di chuyển mượt mà
@@ -410,34 +443,20 @@ function mouseDragged() {
       if (showAngle) computeAllRepresentativeAngles();
     }
   } else {
-    // --- CẢI TIẾN: XOAY TRACKBALL - ĐÃ ĐẢO NGƯỢC HƯỚNG ---
     let dx = mouseX - prevMouseX;
     let dy = mouseY - prevMouseY;
     
     if (dx !== 0 || dy !== 0) {
       let sensitivity = 0.01; // Độ nhạy xoay
-      
-      // Tính khoảng cách di chuyển của chuột
       let distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Tạo trục xoay vuông góc với hướng di chuyển của chuột
-      // ĐẢO NGƯỢC: Thay đổi từ (-dy, dx, 0) thành (dy, -dx, 0)
       let rotationAxisScreen = createVector(dy, -dx, 0).normalize();
-      
-      // Chuyển trục xoay từ không gian camera sang không gian world
       let rotationAxisWorld = createVector(
         curRot[0] * rotationAxisScreen.x + curRot[1] * rotationAxisScreen.y + curRot[2] * rotationAxisScreen.z,
         curRot[4] * rotationAxisScreen.x + curRot[5] * rotationAxisScreen.y + curRot[6] * rotationAxisScreen.z,
         curRot[8] * rotationAxisScreen.x + curRot[9] * rotationAxisScreen.y + curRot[10] * rotationAxisScreen.z
       ).normalize();
-      
-      // Góc xoay tỷ lệ với khoảng cách di chuyển
       let angle = distance * sensitivity;
-      
-      // Tạo ma trận xoay quanh trục
       let rotMatrix = createAxisAngleMatrix(rotationAxisWorld, angle);
-      
-      // Áp dụng xoay vào ma trận hiện tại
       curRot = multiplyMatrices(rotMatrix, curRot);
     }
   }
@@ -456,7 +475,7 @@ function mouseReleased() {
   }
 }
 
-// --- HELPER MATH ---
+// helper math (unchanged)
 function createAxisAngleMatrix(axis, angle) {
   let c = Math.cos(angle);
   let s = Math.sin(angle);
@@ -516,8 +535,9 @@ function findHitSphere(mx, my, tmat) {
     } else if (s.type === "blue") {
       let xx = (mx - s2d.x) / scale3D;
       let yy = (my - s2d.y) / scale3D;
-      let ovalEq = (xx*xx)/(OVAL_A*OVAL_A) + (yy*yy)/(OVAL_B*OVAL_B);
-      if (ovalEq <= 1.02 && dist(0,0,xx,yy) < minD) {
+      // Vùng hit đơn giản hóa cho oval
+      let ovalEq = (xx*xx)/(OVAL_A_STD*OVAL_A_STD) + (yy*yy)/(OVAL_B_STD*OVAL_B_STD);
+      if (ovalEq <= 1.2 && dist(0,0,xx,yy) < minD) {
         bestIdx = i; minD = dist(0,0,xx,yy);
       }
     }
@@ -525,34 +545,89 @@ function findHitSphere(mx, my, tmat) {
   return bestIdx;
 }
 
+// LOGIC MỚI: Nhóm các góc và loại bỏ góc tổng hợp (Composite Angles)
+// Ví dụ: Nếu có góc A-B = 90 và B-C = 90, thì góc A-C = 180 sẽ bị ẩn đi.
 function computeAllRepresentativeAngles() {
   angleRepresentatives = [];
-  const types = [
-    {type: "white-white", filter: ["white","white"]},
-    {type: "blue-white", filter: ["blue","white"]},
-    {type: "blue-blue", filter: ["blue","blue"]}
-  ];
-  let used = new Set();
-  types.forEach(({type,filter}) => {
-    let minI = -1, minJ = -1, minD = 1e9;
-    for (let i = 0; i < spheres.length; ++i) for (let j = i+1; j < spheres.length; ++j) {
-      if (
-        spheres[i].type === filter[0] && spheres[j].type === filter[1] &&
-        !used.has(`${i},${j}`) && !used.has(`${j},${i}`)
-      ) {
-        let dirI = spheres[i].pos.copy().normalize();
-        let dirJ = spheres[j].pos.copy().normalize();
-        let d = p5.Vector.dist(dirI, dirJ);
+  let allPairs = [];
+  
+  // 1. Tính toán tất cả các cặp góc thô
+  for (let i = 0; i < spheres.length; i++) {
+    for (let j = i + 1; j < spheres.length; j++) {
+      let v1 = spheres[i].pos.copy().normalize();
+      let v2 = spheres[j].pos.copy().normalize();
+      let dot = constrain(v1.dot(v2), -1, 1);
+      let angleDeg = degrees(Math.acos(dot));
+
+      let t1 = spheres[i].type;
+      let t2 = spheres[j].type;
+      let typeStr = (t1 < t2) ? `${t1}-${t2}` : `${t2}-${t1}`;
+
+      allPairs.push({
+        indices: [i, j],
+        angle: angleDeg,
+        type: typeStr,
+        visible: true // Mặc định hiển thị
+      });
+    }
+  }
+
+  // Helper: Tìm cặp góc giữa 2 index
+  const getPair = (idx1, idx2) => {
+    return allPairs.find(p => 
+      (p.indices[0] === idx1 && p.indices[1] === idx2) || 
+      (p.indices[0] === idx2 && p.indices[1] === idx1)
+    );
+  };
+
+  // 2. Lọc bỏ góc tổng hợp (Composite Check)
+  // Duyệt qua tất cả các bộ 3 điểm (i, j, k). 
+  // Nếu góc(i,k) xấp xỉ góc(i,j) + góc(j,k) thì ẩn góc(i,k).
+  for (let i = 0; i < spheres.length; i++) {
+    for (let k = i + 1; k < spheres.length; k++) {
+      let pairIK = getPair(i, k);
+      if (!pairIK) continue;
+      
+      // Thử tìm một vector trung gian 'j'
+      for (let j = 0; j < spheres.length; j++) {
+        if (j === i || j === k) continue;
         
-        if (d < minD) { minD = d; minI = i; minJ = j; }
+        let pairIJ = getPair(i, j);
+        let pairJK = getPair(j, k);
+        
+        if (pairIJ && pairJK) {
+          let sumAngles = pairIJ.angle + pairJK.angle;
+          // Cho phép sai số khoảng 3.5 độ
+          if (Math.abs(pairIK.angle - sumAngles) < 3.5) {
+            pairIK.visible = false;
+            break; // Đã tìm thấy thành phần con, ẩn góc lớn này đi
+          }
+        }
       }
     }
-    if (minI != -1 && minJ != -1) {
-      angleRepresentatives.push({type, indices:[minI,minJ]});
-      used.add(`${minI},${minJ}`);
-      used.add(`${minJ},${minI}`);
+  }
+
+  // 3. Gom nhóm (Grouping) các góc còn lại (visible) theo Type + Value
+  let foundGroups = []; 
+  for (let p of allPairs) {
+    if (!p.visible) continue;
+
+    // Kiểm tra xem đã có nhóm nào cùng Type và cùng Angle (xấp xỉ) chưa
+    let exists = foundGroups.find(g => 
+      g.type === p.type && Math.abs(g.angle - p.angle) < 3.0
+    );
+
+    if (!exists) {
+      let newGroup = {
+        type: p.type,
+        angle: p.angle,
+        indices: p.indices
+      };
+      foundGroups.push(newGroup);
+      angleRepresentatives.push(newGroup);
     }
-  });
+    // Nếu đã exists thì chỉ là bản sao (ví dụ 120 độ thứ 2, thứ 3...), không cần thêm.
+  }
 }
 
 function drawCentralPoint() {
@@ -561,85 +636,90 @@ function drawCentralPoint() {
   ambientMaterial(220, 30, 30);
   specularMaterial(50); 
   shininess(20); 
-  sphere(RED_RADIUS, 64, 64); // TĂNG từ 32 lên 64 segments
+  sphere(RED_RADIUS, 64, 64);
   pop();
 }
 
-// Hàm vẽ electron - KÍCH THƯỚC BAN ĐẦU, MÀU ĐỎ SÁNG
 function drawElectron3D(x, y, z) {
   push();
   translate(x, y, z);
   noStroke();
-  
-  // Màu đỏ sáng
   let c = color(255, 80, 80); 
   ambientMaterial(c); 
-  emissiveMaterial(255, 60, 60); // Tự phát sáng đỏ
-  specularMaterial(255, 220, 220); // Highlight sáng
-  shininess(180); // Độ bóng cao
-  
+  emissiveMaterial(255, 60, 60);
+  specularMaterial(255, 220, 220);
+  shininess(180);
   fill(c); 
-  sphere(5, 64, 64); // TĂNG từ 32 lên 64 segments
+  sphere(5, 64, 64);
   pop();
 }
 
 function drawSphere(idx) {
   let s = spheres[idx];
-  let p = s.pos;
-  push();
-  translate(p.x, p.y, p.z);
-  noStroke();
-
+  
   if (s.type === 'blue') {
-    let expandFactor = realRepulsionEnabled ? 1.2 : 1.0; 
-    let toCenter = p5.Vector.mult(p, -1).normalize();
+    // Tách biệt vị trí vật lý và vị trí hiển thị
+    // Vị trí vật lý: s.pos (để tính toán góc đẩy)
+    // Vị trí hiển thị: dir * visualDist (để đảm bảo tiếp xúc hình học)
+    let dir = s.pos.copy().normalize();
+    
+    let currentA = realRepulsionEnabled ? OVAL_A_STD * 1.3 : OVAL_A_STD;
+    let currentB = realRepulsionEnabled ? OVAL_B_STD * 1.3 : OVAL_B_STD;
+    let currentC = realRepulsionEnabled ? OVAL_C_STD * 1.3 : OVAL_C_STD;
+    
+    // Tính khoảng cách để đầu nhọn chạm vào bề mặt cầu đỏ (bán kính 36)
+    let visualDist = RED_RADIUS + currentA; 
+    let visualPos = dir.copy().mult(visualDist);
+
+    push();
+    translate(visualPos.x, visualPos.y, visualPos.z);
+    noStroke();
+
+    let toCenter = dir.copy().mult(-1);
     alignVectorToAxis(toCenter, createVector(1, 0, 0));
 
-    // Vẽ electron trước (nếu trong suốt thì sẽ thấy, nếu đặc thì bị che)
     push();
     let distFromAxis = 8; 
     drawElectron3D(0, distFromAxis, 0);
     drawElectron3D(0, -distFromAxis, 0);
     pop();
     
-    // --- VẼ OVAL - KIỂM TRA TRẠNG THÁI TRONG SUỐT ---
     if (ovalTransparent) {
-      // Chế độ trong suốt cao - nhìn thấy electron bên trong
       push();
       ambientMaterial(20, 140, 235);
       specularMaterial(80, 180, 255);
       shininess(50);
-      fill(20, 140, 235, 50); // Rất trong suốt
-      ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64);
+      fill(20, 140, 235, 50);
+      ellipsoid(currentA, currentB, currentC, 64, 64);
       pop();
       
       push();
       ambientMaterial(10, 80, 150);
       noLights();
-      fill(10, 80, 150, 30); // Gần như trong suốt hoàn toàn
-      ellipsoid(OVAL_A * expandFactor * 0.75, OVAL_B * expandFactor * 0.75, OVAL_C * expandFactor * 0.75, 48, 48);
+      fill(10, 80, 150, 30);
+      ellipsoid(currentA * 0.75, currentB * 0.75, currentC * 0.75, 48, 48);
       pop();
     } else {
-      // Chế độ ĐẶC - che khuất hoàn toàn electron bên trong
       push();
       ambientMaterial(20, 140, 235);
       specularMaterial(120, 200, 255);
       shininess(80);
-      fill(20, 140, 235, 255); // Hoàn toàn đặc (alpha = 255)
-      ellipsoid(OVAL_A * expandFactor, OVAL_B * expandFactor, OVAL_C * expandFactor, 64, 64);
+      fill(20, 140, 235, 255);
+      ellipsoid(currentA, currentB, currentC, 64, 64);
       pop();
     }
+    pop();
 
   } else if (s.type === 'white') {
+    push();
+    translate(s.pos.x, s.pos.y, s.pos.z);
+    noStroke();
     ambientMaterial(200, 200, 200);
     specularMaterial(150); 
     shininess(60); 
-    sphere(WHITE_SPHERE_RADIUS, 64, 64); // TĂNG từ 32 lên 64 segments
-  } else {
-    ambientMaterial(200);
-    sphere(27, 64, 64); // TĂNG từ 32 lên 64 segments
+    sphere(WHITE_SPHERE_RADIUS, 64, 64);
+    pop();
   }
-  pop();
 }
 
 function alignVectorToAxis(targetDir, fromAxis) {
@@ -665,14 +745,12 @@ function drawBond(idx) {
   if (showBondOvals) {
     push();
     
-    let distCenterToWhite = RADIUS_WHITE; 
-    let startR = RED_RADIUS; 
-    let endR = distCenterToWhite - WHITE_SPHERE_RADIUS; 
-    let length = endR - startR; 
-    let midR = startR + length / 2; 
-    
     let dir = B.copy().normalize();
-    let ovalPos = dir.copy().mult(midR);
+    
+    // Tính toán vị trí oval liên kết
+    // Tâm cầu đỏ (0) -> Bán kính đỏ (36) -> Oval A=26 (Chiều dài 52) -> Mặt trắng
+    // Tâm Oval nằm ở 36 + 26 = 62.
+    let ovalPos = dir.copy().mult(DIST_VISUAL_STD);
     
     translate(ovalPos.x, ovalPos.y, ovalPos.z);
     
@@ -682,7 +760,6 @@ function drawBond(idx) {
     let distY = 8;
     let distZ = 8;
     
-    // Vẽ electron trước
     if (s.bondType === "single") {
       drawElectron3D(0, distY, 0);
       drawElectron3D(0, -distY, 0);
@@ -703,31 +780,28 @@ function drawBond(idx) {
       }
     }
 
-    // --- VẼ OVAL LIÊN KẾT - KIỂM TRA TRẠNG THÁI TRONG SUỐT ---
     if (ovalTransparent) {
-      // Chế độ trong suốt cao - nhìn thấy electron
       push();
       ambientMaterial(20, 140, 235);
       specularMaterial(80, 180, 255);
       shininess(50);
       fill(20, 140, 235, 50);
-      ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64);
+      ellipsoid(OVAL_A_STD, OVAL_B_STD, OVAL_C_STD, 64, 64);
       pop();
       
       push();
       ambientMaterial(10, 80, 150);
       noLights();
       fill(10, 80, 150, 30);
-      ellipsoid(OVAL_A * 0.75, OVAL_B * 0.75, OVAL_C * 0.75, 48, 48);
+      ellipsoid(OVAL_A_STD * 0.75, OVAL_B_STD * 0.75, OVAL_C_STD * 0.75, 48, 48);
       pop();
     } else {
-      // Chế độ ĐẶC - che khuất electron
       push();
       ambientMaterial(20, 140, 235);
       specularMaterial(120, 200, 255);
       shininess(80);
-      fill(20, 140, 235, 255); // Hoàn toàn đặc
-      ellipsoid(OVAL_A, OVAL_B, OVAL_C, 64, 64);
+      fill(20, 140, 235, 255);
+      ellipsoid(OVAL_A_STD, OVAL_B_STD, OVAL_C_STD, 64, 64);
       pop();
     }
     
@@ -748,7 +822,7 @@ function drawBondBetweenPoints(A, B, color, num, radius = 4) {
   let d = p5.Vector.sub(B, A).mag();
   let bondVec = p5.Vector.sub(B, A).normalize();
   let mid = p5.Vector.add(A, B).mult(0.5);
-  let gap = 8; // TĂNG từ 7 lên 8 - các liên kết cách xa nhau thêm 1px
+  let gap = 8;
   let ortho = randomOrthogonal(bondVec);
   for (let i = 0; i < num; i++) {
     let offset = (num === 1) ? 0 : (i - (num-1)/2) * gap;
@@ -760,7 +834,7 @@ function drawBondBetweenPoints(A, B, color, num, radius = 4) {
     specularMaterial(20);
     shininess(10);
     noStroke();
-    cylinder(radius, max(d, 2), 32, 1); // TĂNG từ 16 lên 32 segments
+    cylinder(radius, max(d, 2), 32, 1);
     pop();
   }
 }
@@ -783,8 +857,9 @@ function drawAngleArc(idxA, idxB) {
   let va = spheres[idxA].pos.copy();
   let vb = spheres[idxB].pos.copy();
   
-  let minR = min(va.mag(), vb.mag());
-  let rArc = minR * 1.15; 
+  // LOGIC MỚI: Dựa vào bán kính cầu đỏ trung tâm + khoảng đệm
+  // RED_RADIUS = 36. 36 + 35 = 71 (khoảng hợp lý ở giữa tâm và liên kết)
+  let rArc = RED_RADIUS + 35; 
 
   let a1 = p5.Vector.normalize(va);
   let a2 = p5.Vector.normalize(vb);
@@ -803,23 +878,24 @@ function drawAngleArc(idxA, idxB) {
   noFill();
   
   stroke(0, 255, 255); 
-  strokeWeight(5); 
+  strokeWeight(3); 
   beginShape();
   for(const pt of pts) vertex(pt.x, pt.y, pt.z);
   endShape();
 
-  strokeWeight(8);
+  strokeWeight(6); 
   point(pts[0].x, pts[0].y, pts[0].z);
   point(pts[steps].x, pts[steps].y, pts[steps].z);
 
   let midVec = p5.Vector.slerp(a1, a2, 0.5);
-  let midPt = midVec.copy().mult(rArc * 1.25); 
+  // Đẩy chữ ra xa một chút so với cung
+  let midPt = midVec.copy().mult(rArc * 1.35); 
 
   fill(255, 225, 24); 
   noStroke();
   
   textFont(arialFont);
-  textSize(32);
+  textSize(26); 
   textAlign(CENTER, CENTER);
   let deg = degrees(angle);
   let str = nf(deg,1,1) + "°";
@@ -835,7 +911,7 @@ function drawAngleArc(idxA, idxB) {
   ];
   applyMatrix(...invRot);
   
-  translate(0, 0, 20); 
+  translate(0, 0, 5); 
   
   text(str, 0, 0);
   pop();
